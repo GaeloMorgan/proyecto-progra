@@ -1,0 +1,10 @@
+# Archivos compilados
+bin/
+build/
+*.class
+
+# Configuraciones locales
+.vscode/*.log
+
+# Archivos temporales
+*.tmp
