@@ -27,8 +27,8 @@ public class ValidadorProducto {
     }
 
     /**
-     * Revisa que el nombre no esté vacío y que no lleve el símbolo |,
-     * porque con ese símbolo se separan los datos en el archivo.
+     * Revisa que el nombre no esté vacío y que no lleve comas,
+     * porque la coma es la que separa los datos en el archivo.
      * @param nombre texto que escribió el usuario
      * @return verdadero si el nombre es válido, falso si no
      */
@@ -36,7 +36,7 @@ public class ValidadorProducto {
         if (nombre.trim().isEmpty()) {
             return false;
         }
-        if (nombre.contains("|")) {
+        if (nombre.contains(",")) {
             return false;
         }
         return true;
@@ -71,16 +71,13 @@ public class ValidadorProducto {
     }
 
     /**
-     * Revisa que el motivo de eliminación no esté vacío y que no lleve
-     * el símbolo |.
+     * Revisa que el motivo de eliminación no esté vacío.
+     * Puede llevar comas porque el motivo va al final de la línea del archivo.
      * @param motivo texto que escribió el usuario
      * @return verdadero si el motivo es válido, falso si no
      */
     public boolean validarMotivo(String motivo) {
         if (motivo.trim().isEmpty()) {
-            return false;
-        }
-        if (motivo.contains("|")) {
             return false;
         }
         return true;

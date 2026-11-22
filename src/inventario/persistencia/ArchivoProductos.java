@@ -11,7 +11,6 @@ import java.util.Scanner;
 
 /**
  * Esta clase lee y guarda los productos en el archivo de texto.
- * Cada línea del archivo tiene el formato: clave|nombre|cantidad|precio
  *
  * @author lucaschivis
  */
@@ -36,8 +35,7 @@ public class ArchivoProductos {
 
     /**
      * Lee el archivo y regresa los productos en una lista.
-     * Las líneas con datos incorrectos se saltan. Si el archivo no existe
-     * regresa una lista vacía.
+     * Las líneas con datos incorrectos se saltan. Si el archivo no existe regresa una lista vacía.
      * @return lista con los productos leídos
      */
     public List<Producto> leerProductos() {
@@ -74,8 +72,8 @@ public class ArchivoProductos {
         }
         try (PrintWriter escritor = new PrintWriter(archivo, "UTF-8")) {
             for (Producto producto : productos) {
-                escritor.println(producto.getClave() + "|" + producto.getNombre() + "|"
-                        + producto.getCantidad() + "|" + producto.getPrecio());
+                escritor.println(producto.getClave() + "," + producto.getNombre() + ","
+                        + producto.getCantidad() + "," + producto.getPrecio());
             }
             return true;
         } catch (IOException e) {
@@ -86,7 +84,7 @@ public class ArchivoProductos {
 
     /**
      * Convierte una línea del archivo en un producto.
-     * @param linea texto con el formato clave|nombre|cantidad|precio
+     * @param linea texto con el formato clave,nombre,cantidad,precio
      * @return el producto, o null si la línea está vacía o tiene datos incorrectos
      */
     private Producto convertirLinea(String linea) {
@@ -94,7 +92,7 @@ public class ArchivoProductos {
             return null;
         }
         // Corta la línea en cuatro datos: clave, nombre, cantidad y precio
-        String[] datos = linea.split("\\|");
+        String[] datos = linea.split(",");
         if (datos.length != 4) {
             return null;
         }
