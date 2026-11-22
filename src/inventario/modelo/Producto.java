@@ -50,7 +50,7 @@ public final class Producto {
 
     /**
      * Cambia el nombre del producto.
-     * Se evita el separador | porque puede utilizarse en productos.txt.
+     * El nombre no puede llevar comas porque la coma separa los datos en productos.txt.
      *
      * @param nombre nuevo nombre
      */
@@ -59,8 +59,8 @@ public final class Producto {
             throw new IllegalArgumentException("El nombre no puede estar vacío.");
         }
         String limpio = nombre.trim();
-        if (limpio.contains("|")) {
-            throw new IllegalArgumentException("El nombre no puede contener el carácter |.");
+        if (limpio.contains(",")) {
+            throw new IllegalArgumentException("El nombre no puede contener comas.");
         }
         this.nombre = limpio;
     }
