@@ -88,10 +88,10 @@ public class ValidadorProducto {
 
     /**
      * Revisa los cuatro datos de un producto al mismo tiempo.
-     * @param clave clave del producto
-     * @param nombre nombre del producto
-     * @param cantidad cantidad en inventario
-     * @param precio precio del producto
+     * @param clave
+     * @param nombre 
+     * @param cantidad 
+     * @param precio 
      * @return verdadero si todos los datos son válidos, falso si alguno no lo es
      */
     public boolean validarProducto(String clave, String nombre, String cantidad, String precio) {
