@@ -5,28 +5,39 @@ import inventario.servicio.InventarioService;
 import inventario.validaciones.ValidadorProducto;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Image;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.awt.image.BufferedImage;
+import java.io.File;
+import java.io.IOException;
+import javax.imageio.ImageIO;
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTextField;
 import javax.swing.KeyStroke;
+import javax.swing.SwingConstants;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.text.AbstractDocument;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
 
 /**
- * Ventana de diálogo para agregar o editar un producto.
+ * Ventana de diálogo para agregar o editar un producto, incluida su imagen opcional.
  * Si se crea con un producto, funciona en modo edición y la clave queda bloqueada.
  */
 public class FormularioProducto extends JDialog {
@@ -40,7 +51,10 @@ public class FormularioProducto extends JDialog {
     private final JTextField txtCantidad = new JTextField(14);
     private final JTextField txtPrecio = new JTextField(14);
     private final JLabel lblError = new JLabel(" ");
+    private final JLabel lblImagen = new JLabel("Sin imagen", SwingConstants.CENTER);
 
+    private File imagenElegida;
+    private boolean quitarImagen;
     private boolean aceptado;
     private String claveResultado;
 
@@ -75,11 +89,12 @@ public class FormularioProducto extends JDialog {
         agregarFila(campos, 1, "Nombre:", txtNombre);
         agregarFila(campos, 2, "Cantidad:", txtCantidad);
         agregarFila(campos, 3, "Precio ($):", txtPrecio);
+        agregarFila(campos, 4, "Imagen:", crearSelectorImagen());
 
         lblError.setForeground(new Color(0xB00020));
         GridBagConstraints c = new GridBagConstraints();
         c.gridx = 0;
-        c.gridy = 4;
+        c.gridy = 5;
         c.gridwidth = 2;
         c.insets = new Insets(8, 0, 0, 0);
         c.anchor = GridBagConstraints.WEST;
@@ -115,7 +130,82 @@ public class FormularioProducto extends JDialog {
         add(botones, BorderLayout.SOUTH);
     }
 
-    private void agregarFila(JPanel panel, int fila, String etiqueta, JTextField campo) {
+    /** Vista previa de la imagen con los botones para elegirla o quitarla. */
+    private JPanel crearSelectorImagen() {
+        lblImagen.setPreferredSize(new Dimension(96, 96));
+        lblImagen.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+        lblImagen.setForeground(Color.GRAY);
+
+        JButton btnElegir = new JButton("Elegir...");
+        JButton btnQuitar = new JButton("Quitar");
+        btnElegir.addActionListener(e -> elegirImagen());
+        btnQuitar.addActionListener(e -> {
+            imagenElegida = null;
+            quitarImagen = true;
+            mostrarVistaPrevia(null);
+        });
+        JPanel botones = new JPanel();
+        botones.setLayout(new BoxLayout(botones, BoxLayout.Y_AXIS));
+        botones.add(btnElegir);
+        botones.add(javax.swing.Box.createVerticalStrut(6));
+        botones.add(btnQuitar);
+
+        JPanel selector = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        selector.add(lblImagen);
+        selector.add(javax.swing.Box.createHorizontalStrut(10));
+        selector.add(botones);
+        return selector;
+    }
+
+    private void elegirImagen() {
+        JFileChooser selector = new JFileChooser();
+        selector.setDialogTitle("Elegir imagen del producto");
+        selector.setApproveButtonText("Elegir");
+        selector.setFileFilter(new FileNameExtensionFilter("Imágenes (png, jpg, gif, bmp)",
+                "png", "jpg", "jpeg", "gif", "bmp"));
+        if (selector.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+            return;
+        }
+        File archivo = selector.getSelectedFile();
+        if (!mostrarVistaPrevia(archivo)) {
+            lblError.setText("El archivo elegido no es una imagen válida.");
+            pack();
+            return;
+        }
+        lblError.setText(" ");
+        imagenElegida = archivo;
+        quitarImagen = false;
+    }
+
+    /**
+     * Muestra la imagen reducida en el cuadro de vista previa.
+     *
+     * @param archivo imagen a mostrar, o null para dejar el cuadro vacío
+     * @return false si el archivo no se pudo leer como imagen
+     */
+    private boolean mostrarVistaPrevia(File archivo) {
+        if (archivo == null) {
+            lblImagen.setIcon(null);
+            lblImagen.setText("Sin imagen");
+            return true;
+        }
+        try {
+            BufferedImage imagen = ImageIO.read(archivo);
+            if (imagen == null) {
+                return false;
+            }
+            double escala = Math.min(90.0 / imagen.getWidth(), 90.0 / imagen.getHeight());
+            int ancho = Math.max(1, (int) Math.round(imagen.getWidth() * escala));
+            int alto = Math.max(1, (int) Math.round(imagen.getHeight() * escala));
+            lblImagen.setText("");
+            lblImagen.setIcon(new ImageIcon(imagen.getScaledInstance(ancho, alto, Image.SCALE_SMOOTH)));
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private void agregarFila(JPanel panel, int fila, String etiqueta, JComponent campo) {
         GridBagConstraints c = new GridBagConstraints();
         c.gridy = fila;
         c.insets = new Insets(4, 0, 4, 8);
@@ -134,6 +224,7 @@ public class FormularioProducto extends JDialog {
         txtNombre.setText(productoEditado.getNombre());
         txtCantidad.setText(String.valueOf(productoEditado.getCantidad()));
         txtPrecio.setText(String.valueOf(productoEditado.getPrecio()));
+        mostrarVistaPrevia(servicio.obtenerImagen(productoEditado.getClave()));
     }
 
     /** Valida campo por campo y, si todo es correcto, pide al servicio agregar o editar. */
@@ -154,9 +245,10 @@ public class FormularioProducto extends JDialog {
         } else {
             try {
                 if (productoEditado == null) {
-                    servicio.agregar(clave, nombre, cantidad, precio);
+                    servicio.agregar(clave, nombre, cantidad, precio, imagenElegida);
                 } else {
-                    servicio.editar(productoEditado.getClave(), nombre, cantidad, precio);
+                    servicio.editar(productoEditado.getClave(), nombre, cantidad, precio,
+                            imagenElegida, quitarImagen);
                 }
                 aceptado = true;
                 claveResultado = clave;

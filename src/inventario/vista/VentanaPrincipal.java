@@ -56,6 +56,7 @@ public class VentanaPrincipal extends JFrame {
     private final DefaultTableModel modeloTabla;
     private final JTable tabla;
     private final PanelHistorial panelHistorial = new PanelHistorial();
+    private final PanelImagen panelImagen = new PanelImagen();
 
     private final JLabel lblVista = new JLabel();
     private final JLabel lblConteo = new JLabel();
@@ -87,6 +88,11 @@ public class VentanaPrincipal extends JFrame {
             }
         };
         tabla = crearTabla();
+        tabla.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                actualizarImagen();
+            }
+        });
 
         setLayout(new BorderLayout());
         add(crearParteSuperior(), BorderLayout.NORTH);
@@ -101,8 +107,8 @@ public class VentanaPrincipal extends JFrame {
                 salir();
             }
         });
-        setMinimumSize(new Dimension(860, 480));
-        setSize(1000, 600);
+        setMinimumSize(new Dimension(900, 560));
+        setSize(1040, 680);
         setLocationRelativeTo(null);
 
         mostrarVista(Vista.INVENTARIO, true);
@@ -156,16 +162,19 @@ public class VentanaPrincipal extends JFrame {
         JButton btnAgregar = new JButton("Agregar");
         JButton btnEditar = new JButton("Editar");
         JButton btnEliminar = new JButton("Eliminar");
+        JButton btnVender = new JButton("Vender");
         btnGuardar.setFont(btnGuardar.getFont().deriveFont(Font.BOLD));
         btnAgregar.addActionListener(e -> agregarProducto());
         btnEditar.addActionListener(e -> editarProducto());
         btnEliminar.addActionListener(e -> eliminarProducto());
+        btnVender.addActionListener(e -> venderProducto());
         btnGuardar.addActionListener(e -> guardarCambios());
 
         JPanel operaciones = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
         operaciones.add(btnAgregar);
         operaciones.add(btnEditar);
         operaciones.add(btnEliminar);
+        operaciones.add(btnVender);
         operaciones.add(Box.createHorizontalStrut(16));
         operaciones.add(btnGuardar);
 
@@ -224,6 +233,7 @@ public class VentanaPrincipal extends JFrame {
     private JPanel panelHistorialConMargen() {
         JPanel contenedor = new JPanel(new BorderLayout());
         contenedor.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 8));
+        contenedor.add(panelImagen, BorderLayout.NORTH);
         contenedor.add(panelHistorial, BorderLayout.CENTER);
         return contenedor;
     }
@@ -297,8 +307,19 @@ public class VentanaPrincipal extends JFrame {
             if (clave.equals(modeloTabla.getValueAt(fila, 0))) {
                 tabla.setRowSelectionInterval(fila, fila);
                 tabla.scrollRectToVisible(tabla.getCellRect(fila, 0, true));
-                return;
+                break;
             }
+        }
+        actualizarImagen();
+    }
+
+    /** Muestra en el panel lateral la imagen del producto seleccionado. */
+    private void actualizarImagen() {
+        String clave = claveSeleccionada();
+        if (clave == null) {
+            panelImagen.limpiar("Selecciona un producto");
+        } else {
+            panelImagen.mostrar(servicio.obtenerImagen(clave), "Sin imagen");
         }
     }
 
@@ -335,6 +356,30 @@ public class VentanaPrincipal extends JFrame {
         if (formulario.fueAceptado()) {
             mostrarVista(vistaActual, false);
             seleccionarClave(clave);
+        }
+    }
+
+    /** Abre el diálogo de venta del producto seleccionado. */
+    private void venderProducto() {
+        String clave = claveSeleccionada();
+        if (clave == null) {
+            aviso("Selecciona primero el producto que quieres vender.");
+            return;
+        }
+        Producto producto = servicio.obtenerProducto(clave);
+        if (producto == null) {
+            aviso("El producto seleccionado ya no existe.");
+            mostrarVista(vistaActual, false);
+            return;
+        }
+        DialogoVenta dialogo = new DialogoVenta(this, servicio, producto);
+        dialogo.setVisible(true);
+        if (dialogo.fueAceptado()) {
+            mostrarVista(vistaActual, false);
+            seleccionarClave(clave);
+            JOptionPane.showMessageDialog(this,
+                    String.format(Locale.US, "Venta registrada. Total: $%,.2f", dialogo.getTotal()),
+                    "Venta realizada", JOptionPane.INFORMATION_MESSAGE);
         }
     }
 

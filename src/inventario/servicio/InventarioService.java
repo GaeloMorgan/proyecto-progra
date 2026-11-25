@@ -7,17 +7,28 @@ import inventario.historial.HistorialPila;
 import inventario.modelo.Producto;
 import inventario.persistencia.ArchivoEliminaciones;
 import inventario.persistencia.ArchivoProductos;
+import inventario.persistencia.ArchivoVentas;
 import inventario.validaciones.ValidadorProducto;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import javax.imageio.ImageIO;
 
 /**
  * Punto de unión entre la interfaz gráfica y los demás módulos: árbol, archivos,
  * validaciones, algoritmos de ordenamiento e historial.
  *
- * <p>Los cambios (agregar, editar, eliminar) solo se hacen en el árbol; el archivo se
- * actualiza hasta que se llama a {@link #guardarCambios()}.</p>
+ * <p>Los cambios (agregar, editar, eliminar, vender) solo se hacen en el árbol; los archivos
+ * se actualizan hasta que se llama a {@link #guardarCambios()}. Las imágenes de los productos
+ * se guardan como {@code datos/imagenes/<clave>.png}.</p>
  */
 public class InventarioService {
 
@@ -32,9 +43,32 @@ public class InventarioService {
         }
     }
 
+    /** Venta realizada que aún no se registra en el archivo de ventas. */
+    private static class VentaPendiente {
+        private final String clave;
+        private final String nombre;
+        private final int cantidad;
+        private final double precio;
+        private final LocalDateTime fecha;
+
+        VentaPendiente(String clave, String nombre, int cantidad, double precio, LocalDateTime fecha) {
+            this.clave = clave;
+            this.nombre = nombre;
+            this.cantidad = cantidad;
+            this.precio = precio;
+            this.fecha = fecha;
+        }
+    }
+
+    /** Lado máximo, en píxeles, de las imágenes guardadas. */
+    private static final int LADO_MAXIMO_IMAGEN = 600;
+
     private ArbolBinarioBusqueda arbol = new ArbolBinarioBusqueda();
     private final ArchivoProductos archivoProductos;
     private final ArchivoEliminaciones archivoEliminaciones;
+    private final ArchivoVentas archivoVentas;
+    private final Path carpetaImagenes;
+    private final List<VentaPendiente> ventasPendientes = new ArrayList<VentaPendiente>();
     private final HistorialPila historial = new HistorialPila();
     private final QuickSort quickSort = new QuickSort();
     private final MergeSort mergeSort = new MergeSort();
@@ -46,6 +80,8 @@ public class InventarioService {
     public InventarioService() {
         this.archivoProductos = new ArchivoProductos();
         this.archivoEliminaciones = new ArchivoEliminaciones();
+        this.archivoVentas = new ArchivoVentas();
+        this.carpetaImagenes = Paths.get("datos", "imagenes");
     }
 
     /**
@@ -57,6 +93,9 @@ public class InventarioService {
     public InventarioService(String rutaProductos, String rutaEliminaciones) {
         this.archivoProductos = new ArchivoProductos(rutaProductos);
         this.archivoEliminaciones = new ArchivoEliminaciones(rutaEliminaciones);
+        Path carpeta = Paths.get(rutaProductos).toAbsolutePath().getParent();
+        this.archivoVentas = new ArchivoVentas(carpeta.resolve("ventas.txt").toString());
+        this.carpetaImagenes = carpeta.resolve("imagenes");
     }
 
     // ------------------------------------------------------------------ carga y guardado
@@ -78,13 +117,14 @@ public class InventarioService {
             }
         }
         eliminacionesPendientes.clear();
+        ventasPendientes.clear();
         cambiosPendientes = false;
         return omitidas;
     }
 
     /**
-     * Escribe el inventario actual en productos.txt y registra en el archivo de
-     * eliminaciones los productos borrados desde el último guardado.
+     * Escribe el inventario actual en productos.txt y registra en sus archivos las
+     * eliminaciones y las ventas hechas desde el último guardado.
      *
      * @throws IOException si algún archivo no se puede escribir
      */
@@ -98,6 +138,16 @@ public class InventarioService {
                 throw new IOException("No se pudo escribir el archivo de eliminaciones.");
             }
             eliminacionesPendientes.remove(0);
+            if (arbol.buscarPorClave(e.producto.getClave()) == null) {
+                borrarImagen(e.producto.getClave()); // el producto ya no existe: su imagen sobra
+            }
+        }
+        while (!ventasPendientes.isEmpty()) {
+            VentaPendiente v = ventasPendientes.get(0);
+            if (!archivoVentas.registrarVenta(v.clave, v.nombre, v.cantidad, v.precio, v.fecha)) {
+                throw new IOException("No se pudo escribir el archivo de ventas.");
+            }
+            ventasPendientes.remove(0);
         }
         cambiosPendientes = false;
         historial.agregarOperacion("Guardar cambios");
@@ -125,15 +175,41 @@ public class InventarioService {
      *         o si la clave ya existe
      */
     public void agregar(String clave, String nombre, String cantidad, String precio) {
+        agregar(clave, nombre, cantidad, precio, null);
+    }
+
+    /**
+     * Agrega un producto nuevo con imagen opcional.
+     *
+     * @param clave seis dígitos
+     * @param nombre nombre del producto
+     * @param cantidad entero mayor o igual a cero
+     * @param precio número mayor que cero
+     * @param imagen archivo de imagen elegido por el usuario, o null si no tendrá imagen
+     * @throws IllegalArgumentException si algún dato es inválido, la clave ya existe o el
+     *         archivo no es una imagen válida
+     */
+    public void agregar(String clave, String nombre, String cantidad, String precio, File imagen) {
         clave = limpiar(clave);
         if (!validador.validarClave(clave)) {
             throw new IllegalArgumentException("La clave debe tener exactamente 6 dígitos.");
         }
         validarDatos(nombre, cantidad, precio);
+        BufferedImage foto = imagen == null ? null : leerImagen(imagen);
         Producto nuevo = new Producto(clave, nombre, Integer.parseInt(limpiar(cantidad)),
                 Double.parseDouble(limpiar(precio)));
         if (!arbol.insertar(nuevo)) {
             throw new IllegalArgumentException("Ya existe un producto con la clave " + clave + ".");
+        }
+        try {
+            if (foto != null) {
+                escribirImagen(clave, foto);
+            } else {
+                borrarImagen(clave); // evita mostrar la imagen de un producto anterior con la misma clave
+            }
+        } catch (IOException e) {
+            arbol.eliminarPorClave(clave);
+            throw new IllegalArgumentException("No se pudo guardar la imagen: " + e.getMessage());
         }
         cambiosPendientes = true;
         historial.agregarOperacion("Agregar producto");
@@ -149,11 +225,37 @@ public class InventarioService {
      * @throws IllegalArgumentException si el producto no existe o algún dato es inválido
      */
     public void editar(String clave, String nombre, String cantidad, String precio) {
+        editar(clave, nombre, cantidad, precio, null, false);
+    }
+
+    /**
+     * Modifica un producto y, opcionalmente, cambia o quita su imagen.
+     *
+     * @param clave clave del producto a editar
+     * @param nombre nuevo nombre
+     * @param cantidad nueva cantidad
+     * @param precio nuevo precio
+     * @param imagen nueva imagen, o null para conservar la actual
+     * @param quitarImagen true para borrar la imagen actual (se ignora si se da una nueva)
+     * @throws IllegalArgumentException si el producto no existe o algún dato es inválido
+     */
+    public void editar(String clave, String nombre, String cantidad, String precio,
+            File imagen, boolean quitarImagen) {
         Producto producto = arbol.buscarPorClave(limpiar(clave));
         if (producto == null) {
             throw new IllegalArgumentException("No existe un producto con la clave " + clave + ".");
         }
         validarDatos(nombre, cantidad, precio);
+        BufferedImage foto = imagen == null ? null : leerImagen(imagen);
+        try {
+            if (foto != null) {
+                escribirImagen(producto.getClave(), foto);
+            } else if (quitarImagen) {
+                borrarImagen(producto.getClave());
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo guardar la imagen: " + e.getMessage());
+        }
         producto.setNombre(nombre);
         producto.setCantidad(Integer.parseInt(limpiar(cantidad)));
         producto.setPrecio(Double.parseDouble(limpiar(precio)));
@@ -185,6 +287,97 @@ public class InventarioService {
         eliminacionesPendientes.add(new EliminacionPendiente(producto, limpiar(motivo)));
         cambiosPendientes = true;
         historial.agregarOperacion("Eliminar producto");
+    }
+
+    /**
+     * Vende unidades de un producto: descuenta las existencias y deja la venta anotada para
+     * registrarla en ventas.txt al guardar los cambios.
+     *
+     * @param clave clave del producto
+     * @param cantidad unidades a vender (entero mayor que 0 y no mayor a las existencias)
+     * @return total cobrado
+     * @throws IllegalArgumentException si el producto no existe, la cantidad es inválida o
+     *         no hay suficientes existencias
+     */
+    public double vender(String clave, String cantidad) {
+        clave = limpiar(clave);
+        Producto producto = arbol.buscarPorClave(clave);
+        if (producto == null) {
+            throw new IllegalArgumentException("No existe un producto con la clave " + clave + ".");
+        }
+        String texto = limpiar(cantidad);
+        if (!texto.matches("\\d{1,9}") || Integer.parseInt(texto) <= 0) {
+            throw new IllegalArgumentException("La cantidad a vender debe ser un entero mayor que 0.");
+        }
+        int unidades = Integer.parseInt(texto);
+        if (producto.getCantidad() == 0) {
+            throw new IllegalArgumentException("El producto no tiene existencias.");
+        }
+        if (unidades > producto.getCantidad()) {
+            throw new IllegalArgumentException("Solo hay " + producto.getCantidad()
+                    + " unidad(es) en existencia.");
+        }
+        double precio = producto.getPrecio();
+        producto.setCantidad(producto.getCantidad() - unidades);
+        ventasPendientes.add(new VentaPendiente(clave, producto.getNombre(), unidades, precio,
+                LocalDateTime.now()));
+        cambiosPendientes = true;
+        historial.agregarOperacion("Vender producto");
+        return Math.round(unidades * precio * 100.0) / 100.0;
+    }
+
+    // ------------------------------------------------------------------ imágenes
+
+    /**
+     * Obtiene el archivo de imagen de un producto.
+     *
+     * @param clave clave del producto
+     * @return archivo de la imagen, o null si el producto no tiene
+     */
+    public File obtenerImagen(String clave) {
+        File archivo = carpetaImagenes.resolve(limpiar(clave) + ".png").toFile();
+        return archivo.isFile() ? archivo : null;
+    }
+
+    private BufferedImage leerImagen(File archivo) {
+        try {
+            BufferedImage imagen = ImageIO.read(archivo);
+            if (imagen == null) {
+                throw new IllegalArgumentException(
+                        "El archivo elegido no es una imagen válida (usa PNG, JPG, GIF o BMP).");
+            }
+            return imagen;
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo leer la imagen: " + e.getMessage());
+        }
+    }
+
+    /** Guarda la imagen como PNG, reduciéndola si es muy grande. */
+    private void escribirImagen(String clave, BufferedImage imagen) throws IOException {
+        int mayorLado = Math.max(imagen.getWidth(), imagen.getHeight());
+        if (mayorLado > LADO_MAXIMO_IMAGEN) {
+            double escala = LADO_MAXIMO_IMAGEN / (double) mayorLado;
+            int ancho = Math.max(1, (int) Math.round(imagen.getWidth() * escala));
+            int alto = Math.max(1, (int) Math.round(imagen.getHeight() * escala));
+            BufferedImage reducida = new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_ARGB);
+            Graphics2D g = reducida.createGraphics();
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+            g.drawImage(imagen, 0, 0, ancho, alto, null);
+            g.dispose();
+            imagen = reducida;
+        }
+        Files.createDirectories(carpetaImagenes);
+        if (!ImageIO.write(imagen, "png", carpetaImagenes.resolve(clave + ".png").toFile())) {
+            throw new IOException("formato de imagen no compatible");
+        }
+    }
+
+    private void borrarImagen(String clave) {
+        try {
+            Files.deleteIfExists(carpetaImagenes.resolve(clave + ".png"));
+        } catch (IOException e) {
+            // Si no se puede borrar, la imagen queda en la carpeta sin afectar al inventario.
+        }
     }
 
     // ------------------------------------------------------------------ búsquedas

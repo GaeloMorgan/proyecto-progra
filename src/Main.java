@@ -4,10 +4,17 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 
-
+/**
+ * Punto de entrada del sistema de inventario. Carga el archivo de productos al árbol
+ * y abre la ventana principal.
+ */
 public class Main {
 
-    
+    /**
+     * Inicia la aplicación.
+     *
+     * @param args no se usan
+     */
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> iniciar());
     }
@@ -23,7 +30,7 @@ public class Main {
         new VentanaPrincipal(servicio).setVisible(true);
     }
 
-    
+    /** Usa el estilo Nimbus y traduce los botones estándar de los cuadros de diálogo. */
     private static void configurarApariencia() {
         try {
             for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
@@ -33,7 +40,7 @@ public class Main {
                 }
             }
         } catch (Exception e) {
-           
+            // Si no se puede aplicar Nimbus se usa el estilo predeterminado.
         }
         UIManager.put("OptionPane.okButtonText", "Aceptar");
         UIManager.put("OptionPane.cancelButtonText", "Cancelar");
